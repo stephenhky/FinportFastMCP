@@ -1,0 +1,11 @@
+fastmcp
+pydantic
+finsim>=1.0.5
+pandas
+numpy
+lppl
+python-dotenv
+plotnine
+mizani
+boto3
+openpyxl
