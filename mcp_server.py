@@ -18,8 +18,17 @@ async def health_check(request: Request) -> PlainTextResponse:
 
 @mcp.tool
 def greet(name: str) -> str:
+    """
+    Greet the user.
+    """
     return f"Hello, {name}!"
 
 
+@mcp.tool
+def add(a: int, b: int) -> int:
+    """Add two numbers"""
+    return a + b
+
+
 if __name__ == "__main__":
-    mcp.run()
+    mcp.run(transport='streamable-http')
