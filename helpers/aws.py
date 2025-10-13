@@ -4,7 +4,7 @@ from os import PathLike
 
 import boto3
 
-from app.apischemas.schemas import S3UploadResponse
+from apischemas.schemas import S3UploadResponse
 
 
 

@@ -17,8 +17,7 @@ import matplotlib
 from loguru import logger
 
 from helpers.data import waiting_get_yahoofinance_data
-from apischemas.schemas import SymbolEstimationResult, SymbolsCorrelationResult, LPPLCrashModelResult, \
-    FittedLPPLModelParameters
+from apischemas.schemas import SymbolEstimationResult, SymbolsCorrelationResult, SimplifiedLPPLCrashModelResult
 
 
 # load additional environment variables
@@ -160,34 +159,42 @@ def predict_crash(
         symbol: str="^GSPC",   # default to be S&P 500
         startdate: Optional[str]=None,
         enddate: Optional[str]=None
-) -> LPPLCrashModelResult:
+) -> SimplifiedLPPLCrashModelResult:
     """
     Predict the crash date of the given symbol and within the start and end dates.
     If the symbol is not given, it is assumed to be the S & P 500 index.
     If the date range is None (not given), it is assumed to be the past year as the given data range.
     """
+    logger.info("Handling input date range.")
     if startdate is None:
         startdate = (datetime.today() - timedelta(days=365)).strftime('%Y-%m-%d')
     if enddate is None:
         enddate = datetime.today().strftime('%Y-%m-%d')
 
     # get symbols
+    logger.info("Getting symbol data.")
     symdf = waiting_get_yahoofinance_data(symbol, startdate, enddate)
 
     # fitting
+    logger.info("Fiting LPPL model...")
     fitted_lppl_model = LPPLModel()
     fitted_lppl_model.tcgap = 60 * 60 * 24
     fitted_lppl_model.fit(symdf['TimeStamp'].map(lambda ts: ts.timestamp()), symdf['Close'])
 
     # gathering output
+    logger.info("Outputting model parameters.")
     model_parameters = fitted_lppl_model.dump_model_parameters()
-    return LPPLCrashModelResult(
+    logger.info(SimplifiedLPPLCrashModelResult(
+        symbol=symbol,
+        startdate=datetime.strptime(startdate, "%Y-%m-%d"),
+        enddate=datetime.strptime(enddate, "%Y-%m-%d"),
+        estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).to_pydatetime().date()
+    ))
+    return SimplifiedLPPLCrashModelResult(
         symbol=symbol,
         startdate=startdate,
         enddate=enddate,
-        estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).strftime('%Y-%m-%d'),
-        estimated_crash_time=str(pd.Timestamp.fromtimestamp(model_parameters['tc'])),
-        model_parameters=FittedLPPLModelParameters(**model_parameters)
+        estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).to_pydatetime().date()
     )
 
 

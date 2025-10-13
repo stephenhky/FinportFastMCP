@@ -51,6 +51,14 @@ class LPPLCrashModelResult(BaseModel):
     model_parameters: FittedLPPLModelParameters
 
 
+class SimplifiedLPPLCrashModelResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    symbol: str
+    startdate: date
+    enddate: date
+    estimated_crash_date: date
+
+
 class S3UploadResponse(BaseModel):
     filename: str
     url: str
