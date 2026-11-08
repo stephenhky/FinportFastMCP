@@ -1,5 +1,6 @@
 
 from datetime import date, datetime
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -11,7 +12,7 @@ class SymbolEstimationResult(BaseModel):
     volatility: float
     downside_risk: float
     upside_risk: float
-    beta: float
+    beta: Optional[float] = None
     data_startdate: date
     data_enddate: date
     nbrecords: int

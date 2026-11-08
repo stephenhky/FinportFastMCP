@@ -10,3 +10,4 @@ mizani
 boto3
 openpyxl
 loguru
+starlette

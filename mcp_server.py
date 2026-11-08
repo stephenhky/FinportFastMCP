@@ -1,8 +1,12 @@
 
 import os
+import tempfile
 from typing import Optional
 from math import sqrt
 from datetime import datetime, timedelta
+
+# Ensure Matplotlib writes its font/config cache to a writable directory (/tmp in AWS Lambda)
+os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
 
 import numpy as np
 import pandas as pd
@@ -66,7 +70,9 @@ def estimate_symbol_info(
     """
     # getting stock data
     symdf = waiting_get_yahoofinance_data(symbol, startdate, enddate)
-    print("Number of lines: {}".format(len(symdf)))
+    if symdf.empty:
+        raise ValueError(f"No market data returned for symbol '{symbol}' between {startdate} and {enddate}.")
+    logger.info("Number of lines: {}".format(len(symdf)))
 
     # getting index
     indexdf = waiting_get_yahoofinance_data(index, startdate, enddate)
@@ -95,7 +101,7 @@ def estimate_symbol_info(
             mgdf['Close_y'].to_numpy(),
             mgdf['Close_x'].to_numpy()
         )
-    except:
+    except Exception:
         logger.warning('Index {} failed to be integrated.'.format(index))
         beta = None
 
@@ -106,8 +112,8 @@ def estimate_symbol_info(
         downside_risk=downside_risk,
         upside_risk=upside_risk,
         beta=beta if beta is not None else None,
-        data_startdate=symdf['TimeStamp'][0].date(),
-        data_enddate=symdf['TimeStamp'][len(symdf) - 1].date(),
+        data_startdate=symdf['TimeStamp'].iloc[0].date(),
+        data_enddate=symdf['TimeStamp'].iloc[-1].date(),
         nbrecords=len(symdf.loc[~isrownull, :])
     )
 
@@ -184,19 +190,23 @@ def predict_crash(
     # gathering output
     logger.info("Outputting model parameters.")
     model_parameters = fitted_lppl_model.dump_model_parameters()
-    logger.info(SimplifiedLPPLCrashModelResult(
+    result = SimplifiedLPPLCrashModelResult(
         symbol=symbol,
-        startdate=datetime.strptime(startdate, "%Y-%m-%d"),
-        enddate=datetime.strptime(enddate, "%Y-%m-%d"),
-        estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).to_pydatetime().date()
-    ))
-    return SimplifiedLPPLCrashModelResult(
-        symbol=symbol,
-        startdate=startdate,
-        enddate=enddate,
+        startdate=datetime.strptime(startdate, "%Y-%m-%d").date(),
+        enddate=datetime.strptime(enddate, "%Y-%m-%d").date(),
         estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).to_pydatetime().date()
     )
+    logger.info(result)
+    return result
 
 
 if __name__ == "__main__":
-    mcp.run(transport='streamable-http')
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", "8000"))
+    stateless_http = os.environ.get("FASTMCP_STATELESS_HTTP", "true").lower() in ("1", "true", "yes")
+    mcp.run(
+        transport="streamable-http",
+        host=host,
+        port=port,
+        stateless_http=stateless_http,
+    )
