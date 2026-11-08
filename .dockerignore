@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+.idea
+.vscode
+.env
+.DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
