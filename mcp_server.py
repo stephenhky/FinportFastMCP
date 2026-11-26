@@ -63,6 +63,10 @@ def get_symbol_closing_price_given_date(
         symbol: str,
         given_date: Optional[date] = None
 ) -> float:
+    """
+    Get the closing price of the given symbol on the given date.
+    If given_date is not provided, it defaults to today's date (America/New_York).
+    """
     if given_date is None:
         _, given_date = resolve_date_range(None, None)
     given_date_str = given_date.strftime("%Y-%m-%d")
