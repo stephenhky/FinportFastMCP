@@ -1,13 +1,13 @@
 
-from datetime import datetime
+from datetime import date
 
 import pandas as pd
 from plotnine import ggplot, aes, geom_line, theme, element_text, scale_x_datetime, labs, ggtitle
 from mizani.breaks import date_breaks
 
 
-def get_optimal_daybreaks(startdate: str, enddate: str) -> str:
-    timediff = datetime.strptime(enddate, '%Y-%m-%d') - datetime.strptime(startdate, '%Y-%m-%d')
+def get_optimal_daybreaks(startdate: date, enddate: date) -> str:
+    timediff = enddate - startdate
     nbdaysdiff = timediff.days
     if nbdaysdiff > 730:
         return '1 year'

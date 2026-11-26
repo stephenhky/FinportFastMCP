@@ -3,7 +3,7 @@ import os
 import tempfile
 from typing import Optional
 from math import sqrt
-from datetime import datetime, timedelta
+from datetime import date
 
 # Ensure Matplotlib writes its font/config cache to a writable directory (/tmp in AWS Lambda)
 os.environ.setdefault("MPLCONFIGDIR", os.path.join(tempfile.gettempdir(), "matplotlib"))
@@ -21,6 +21,7 @@ import matplotlib
 from loguru import logger
 
 from helpers.data import waiting_get_yahoofinance_data
+from helpers.utils import resolve_date_range
 from apischemas.schemas import SymbolEstimationResult, SymbolsCorrelationResult, SimplifiedLPPLCrashModelResult
 
 
@@ -58,24 +59,47 @@ def add(a: int, b: int) -> int:
 
 
 @mcp.tool
+def get_symbol_closing_price_given_date(
+        symbol: str,
+        given_date: Optional[date] = None
+) -> float:
+    if given_date is None:
+        _, given_date = resolve_date_range(None, None)
+    given_date_str = given_date.strftime("%Y-%m-%d")
+    # getting stock data
+    symdf = waiting_get_yahoofinance_data(symbol, given_date_str, given_date_str)
+    if symdf.empty:
+        raise ValueError(f"No market data returned for symbol '{symbol}' on {given_date_str}.")
+    return float(symdf.loc[0, "Close"])
+
+
+@mcp.tool
 def estimate_symbol_info(
         symbol: str,
-        startdate: str,
-        enddate: str,
-        index: str='^GSPC'    # i.e., S&P 500 index as the base for calculating beta
+        startdate: Optional[date] = None,
+        enddate: Optional[date] = None,
+        index: str = '^GSPC'    # i.e., S&P 500 index as the base for calculating beta
 ) -> SymbolEstimationResult:
     """
     Estimate information about the given symbol within the start and end dates.
     It gives the yield rate, volatility, downside risk, upside risk, and beta.
+
+    If the startdate is not given, it is assumed to be one year before the enddate.
+    If the enddate is not given, it is assumed to be today.
     """
+    logger.info("Handling input date range.")
+    startdate, enddate = resolve_date_range(startdate, enddate)
+    start_str = startdate.strftime("%Y-%m-%d")
+    end_str = enddate.strftime("%Y-%m-%d")
+
     # getting stock data
-    symdf = waiting_get_yahoofinance_data(symbol, startdate, enddate)
+    symdf = waiting_get_yahoofinance_data(symbol, start_str, end_str)
     if symdf.empty:
-        raise ValueError(f"No market data returned for symbol '{symbol}' between {startdate} and {enddate}.")
+        raise ValueError(f"No market data returned for symbol '{symbol}' between {start_str} and {end_str}.")
     logger.info("Number of lines: {}".format(len(symdf)))
 
     # getting index
-    indexdf = waiting_get_yahoofinance_data(index, startdate, enddate)
+    indexdf = waiting_get_yahoofinance_data(index, start_str, end_str)
 
     # estimation
     isrownull = symdf['Close'].isnull()
@@ -122,15 +146,23 @@ def estimate_symbol_info(
 def estimate_symbols_correlation(
         symbol1: str,
         symbol2: str,
-        startdate: str,
-        enddate: str
+        startdate: Optional[date] = None,
+        enddate: Optional[date] = None
 ) -> SymbolsCorrelationResult:
     """
     Estimate the correlation between two given symbols within the start and end dates.
+
+    If the startdate is not given, it is assumed to be one year before the enddate.
+    If the enddate is not given, it is assumed to be today.
     """
+    logger.info("Handling input date range.")
+    startdate, enddate = resolve_date_range(startdate, enddate)
+    start_str = startdate.strftime("%Y-%m-%d")
+    end_str = enddate.strftime("%Y-%m-%d")
+
     # get symbols' prices
-    sym1df = waiting_get_yahoofinance_data(symbol1, startdate, enddate)
-    sym2df = waiting_get_yahoofinance_data(symbol2, startdate, enddate)
+    sym1df = waiting_get_yahoofinance_data(symbol1, start_str, end_str)
+    sym2df = waiting_get_yahoofinance_data(symbol2, start_str, end_str)
     combined_df = sym1df[['TimeStamp', 'Close']].rename(columns={'Close': 'Close1'}). \
         merge(
         sym2df[['TimeStamp', 'Close']].rename(columns={'Close': 'Close2'}),
@@ -163,23 +195,26 @@ def estimate_symbols_correlation(
 @mcp.tool
 def predict_crash(
         symbol: str="^GSPC",   # default to be S&P 500
-        startdate: Optional[str]=None,
-        enddate: Optional[str]=None
+        startdate: Optional[date] = None,
+        enddate: Optional[date] = None
 ) -> SimplifiedLPPLCrashModelResult:
     """
     Predict the crash date of the given symbol and within the start and end dates.
-    If the symbol is not given, it is assumed to be the S & P 500 index.
-    If the date range is None (not given), it is assumed to be the past year as the given data range.
+    If the symbol is not given, it is assumed to be the S & P 500 index (^GSPC).
+
+    If the startdate is not given, it is assumed to be one year before the enddate.
+    If the enddate is not given, it is assumed to be today.
     """
     logger.info("Handling input date range.")
-    if startdate is None:
-        startdate = (datetime.today() - timedelta(days=365)).strftime('%Y-%m-%d')
-    if enddate is None:
-        enddate = datetime.today().strftime('%Y-%m-%d')
+    startdate, enddate = resolve_date_range(startdate, enddate)
 
     # get symbols
     logger.info("Getting symbol data.")
-    symdf = waiting_get_yahoofinance_data(symbol, startdate, enddate)
+    symdf = waiting_get_yahoofinance_data(
+        symbol,
+        startdate.strftime("%Y-%m-%d"),
+        enddate.strftime("%Y-%m-%d"),
+    )
 
     # fitting
     logger.info("Fiting LPPL model...")
@@ -192,8 +227,8 @@ def predict_crash(
     model_parameters = fitted_lppl_model.dump_model_parameters()
     result = SimplifiedLPPLCrashModelResult(
         symbol=symbol,
-        startdate=datetime.strptime(startdate, "%Y-%m-%d").date(),
-        enddate=datetime.strptime(enddate, "%Y-%m-%d").date(),
+        startdate=startdate,
+        enddate=enddate,
         estimated_crash_date=pd.Timestamp.fromtimestamp(model_parameters['tc']).to_pydatetime().date()
     )
     logger.info(result)
